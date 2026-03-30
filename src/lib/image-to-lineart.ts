@@ -83,6 +83,25 @@ function threshold(data: Float32Array, value: number): Uint8ClampedArray {
   return output;
 }
 
+function posterize(
+  data: Uint8ClampedArray,
+  levels: number
+): Uint8ClampedArray {
+  // Reduce color depth to flatten highlights and gradients into solid blocks.
+  // Each channel is quantized to `levels` discrete values.
+  const output = new Uint8ClampedArray(data);
+  const step = 255 / (levels - 1);
+  const halfStep = step / 2;
+
+  for (let i = 0; i < data.length; i += 4) {
+    output[i] = Math.round(Math.round((data[i] + halfStep) / step) * step);       // R
+    output[i + 1] = Math.round(Math.round((data[i + 1] + halfStep) / step) * step); // G
+    output[i + 2] = Math.round(Math.round((data[i + 2] + halfStep) / step) * step); // B
+    // Keep alpha unchanged
+  }
+  return output;
+}
+
 function removeBackground(
   data: Uint8ClampedArray,
   width: number,
@@ -311,35 +330,38 @@ export function imageToLineart(sourceCanvas: HTMLCanvasElement): HTMLCanvasEleme
   const ctx = sourceCanvas.getContext("2d")!;
   const imageData = ctx.getImageData(0, 0, width, height);
 
-  // 1. Remove background (flood-fill from edges, set near-white to pure white)
-  const cleanedData = removeBackground(imageData.data, width, height);
+  // 1. Posterize — flatten highlights and gradients into solid color blocks
+  const posterized = posterize(imageData.data, 4);
 
-  // 2. Grayscale on background-removed image
+  // 2. Remove background (flood-fill from edges, set near-white to pure white)
+  const cleanedData = removeBackground(posterized, width, height);
+
+  // 3. Grayscale on background-removed image
   const gray = grayscale(cleanedData);
 
-  // 3. Invert the grayscale
+  // 4. Invert the grayscale
   const inverted = new Float32Array(gray.length);
   for (let i = 0; i < gray.length; i++) {
     inverted[i] = 255 - gray[i];
   }
 
-  // 4. Heavy Gaussian blur on the inverted image
+  // 5. Heavy Gaussian blur on the inverted image
   const blurRadius = Math.max(Math.round(Math.min(width, height) / 35), 10);
   const blurred = gaussianBlurSeparable(inverted, width, height, blurRadius);
 
-  // 5. Color Dodge blend: original gray / (1 - blurred/255)
+  // 6. Color Dodge blend: original gray / (1 - blurred/255)
   const sketch = colorDodgeBlend(gray, blurred);
 
-  // 6. Threshold — lower value = more/thicker lines
+  // 7. Threshold — lower value = more/thicker lines
   const binary = threshold(sketch, 220);
 
-  // 7. Dilate to make lines more solid before hollowing
+  // 8. Dilate to make lines more solid before hollowing
   const dilated = dilate(binary, width, height);
 
-  // 8. Hollow out filled black regions — keep only outlines
+  // 9. Hollow out filled black regions — keep only outlines
   const hollowed = hollowOutFilledRegions(dilated, width, height);
 
-  // 9. Remove small noise clusters
+  // 10. Remove small noise clusters
   const minNoiseSize = Math.max(Math.round((width * height) / 30000), 8);
   const final = cleanupSmallNoise(hollowed, width, height, minNoiseSize);
 
