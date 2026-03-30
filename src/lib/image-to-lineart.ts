@@ -83,6 +83,62 @@ function threshold(data: Float32Array, value: number): Uint8ClampedArray {
   return output;
 }
 
+function removeBackground(
+  data: Uint8ClampedArray,
+  width: number,
+  height: number
+): Uint8ClampedArray {
+  // Flood-fill from edges to remove near-white background
+  // Makes the background pure white so color dodge doesn't create edge artifacts
+  const output = new Uint8ClampedArray(data);
+  const visited = new Uint8Array(width * height);
+  const stack: number[] = [];
+
+  const isBackground = (idx: number) => {
+    const offset = idx * 4;
+    const r = data[offset];
+    const g = data[offset + 1];
+    const b = data[offset + 2];
+    const a = data[offset + 3];
+    // Near-white or transparent = background
+    return (r > 230 && g > 230 && b > 230) || a < 128;
+  };
+
+  // Seed from all 4 edges
+  for (let x = 0; x < width; x++) {
+    stack.push(x); // top row
+    stack.push((height - 1) * width + x); // bottom row
+  }
+  for (let y = 0; y < height; y++) {
+    stack.push(y * width); // left col
+    stack.push(y * width + width - 1); // right col
+  }
+
+  while (stack.length > 0) {
+    const idx = stack.pop()!;
+    if (idx < 0 || idx >= width * height) continue;
+    if (visited[idx]) continue;
+    visited[idx] = 1;
+    if (!isBackground(idx)) continue;
+
+    // Set to pure white
+    const offset = idx * 4;
+    output[offset] = 255;
+    output[offset + 1] = 255;
+    output[offset + 2] = 255;
+    output[offset + 3] = 255;
+
+    const x = idx % width;
+    const y = (idx - x) / width;
+    if (x > 0) stack.push(idx - 1);
+    if (x < width - 1) stack.push(idx + 1);
+    if (y > 0) stack.push(idx - width);
+    if (y < height - 1) stack.push(idx + width);
+  }
+
+  return output;
+}
+
 function cleanupSmallNoise(
   binary: Uint8ClampedArray,
   width: number,
@@ -133,27 +189,29 @@ export function imageToLineart(sourceCanvas: HTMLCanvasElement): HTMLCanvasEleme
   const ctx = sourceCanvas.getContext("2d")!;
   const imageData = ctx.getImageData(0, 0, width, height);
 
-  // 1. Grayscale
-  const gray = grayscale(imageData.data);
+  // 1. Remove background (flood-fill from edges, set near-white to pure white)
+  const cleanedData = removeBackground(imageData.data, width, height);
 
-  // 2. Invert the grayscale
+  // 2. Grayscale on background-removed image
+  const gray = grayscale(cleanedData);
+
+  // 3. Invert the grayscale
   const inverted = new Float32Array(gray.length);
   for (let i = 0; i < gray.length; i++) {
     inverted[i] = 255 - gray[i];
   }
 
-  // 3. Heavy Gaussian blur on the inverted image
-  // Smaller blur = thinner lines; larger blur = thicker lines
-  const blurRadius = Math.max(Math.round(Math.min(width, height) / 60), 6);
+  // 4. Heavy Gaussian blur on the inverted image
+  const blurRadius = Math.max(Math.round(Math.min(width, height) / 35), 10);
   const blurred = gaussianBlurSeparable(inverted, width, height, blurRadius);
 
-  // 4. Color Dodge blend: original gray / (1 - blurred/255)
+  // 5. Color Dodge blend: original gray / (1 - blurred/255)
   const sketch = colorDodgeBlend(gray, blurred);
 
-  // 5. Threshold to clean binary output — higher value = less fill, cleaner coloring areas
-  const binary = threshold(sketch, 230);
+  // 6. Threshold — tuned for uniform thin lines
+  const binary = threshold(sketch, 235);
 
-  // 6. Remove small noise clusters
+  // 7. Remove small noise clusters
   const minNoiseSize = Math.max(Math.round((width * height) / 30000), 8);
   const cleaned = cleanupSmallNoise(binary, width, height, minNoiseSize);
 
