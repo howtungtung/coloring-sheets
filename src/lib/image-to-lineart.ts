@@ -69,18 +69,11 @@ function extractOutlinePixels(
   const output = new Uint8ClampedArray(width * height);
   output.fill(255);
 
-  // Pre-compute luminance and saturation
+  // Pre-compute luminance
   const lum = new Float32Array(width * height);
-  const sat = new Float32Array(width * height);
   for (let i = 0; i < width * height; i++) {
     const offset = i * 4;
-    const r = data[offset];
-    const g = data[offset + 1];
-    const b = data[offset + 2];
-    lum[i] = 0.299 * r + 0.587 * g + 0.114 * b;
-    const max = Math.max(r, g, b);
-    const min = Math.min(r, g, b);
-    sat[i] = max === 0 ? 0 : (max - min) / max;
+    lum[i] = 0.299 * data[offset] + 0.587 * data[offset + 1] + 0.114 * data[offset + 2];
   }
 
   // Use max luminance in 4 cardinal directions to detect outlines
@@ -89,12 +82,8 @@ function extractOutlinePixels(
     for (let x = radius; x < width - radius; x++) {
       const idx = y * width + x;
       const pixelLum = lum[idx];
-      const pixelSat = sat[idx];
 
-      // Skip colored pixels — outlines are black/gray (low saturation)
-      if (pixelSat > 0.4 && pixelLum > 60) continue;
-
-      // (a) Absolutely dark and low saturation
+      // (a) Absolutely dark
       if (pixelLum < 120) {
         output[idx] = 0;
         continue;
