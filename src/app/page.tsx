@@ -63,19 +63,18 @@ export default function Home() {
         <p className="text-sm text-[#7a5c45] mt-1">把照片變成好玩的著色圖！</p>
       </header>
 
-      <input
-        ref={fileInputRef}
-        type="file"
-        accept="image/*"
-        className="hidden"
-        onChange={handleFileChange}
-      />
-
       <div className="flex-1 flex flex-col items-center gap-8 p-6 md:p-10">
         {!originalSrc && <ImageUploader onImageLoaded={handleImageLoaded} />}
 
         {originalSrc && (
           <>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              className="hidden"
+              onChange={handleFileChange}
+            />
             <ImagePreview
               originalSrc={originalSrc}
               lineartDataUrl={lineartDataUrl}
