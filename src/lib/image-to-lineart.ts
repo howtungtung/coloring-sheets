@@ -64,9 +64,8 @@ function extractOutlinePixels(
   height: number
 ): Uint8ClampedArray {
   // A pixel is an outline if:
-  // (a) it's absolutely dark (luminance < 100), OR
-  // (b) it's relatively much darker than its neighbors (local contrast)
-  // This catches both pure black lines and colored outline strokes.
+  // (a) it's absolutely dark (luminance < 120), OR
+  // (b) it's the local minimum in luminance compared to neighbors (local contrast)
   const output = new Uint8ClampedArray(width * height);
   output.fill(255);
 
@@ -77,34 +76,63 @@ function extractOutlinePixels(
     lum[i] = 0.299 * data[offset] + 0.587 * data[offset + 1] + 0.114 * data[offset + 2];
   }
 
-  const radius = 3;
+  // Use max luminance in 4 cardinal directions to detect outlines
+  const radius = 4;
   for (let y = radius; y < height - radius; y++) {
     for (let x = radius; x < width - radius; x++) {
       const idx = y * width + x;
       const pixelLum = lum[idx];
 
       // (a) Absolutely dark
-      if (pixelLum < 100) {
+      if (pixelLum < 120) {
         output[idx] = 0;
         continue;
       }
 
-      // (b) Compute average luminance of surrounding ring
-      let sumNeighbor = 0;
-      let countNeighbor = 0;
-      for (let dy = -radius; dy <= radius; dy++) {
-        for (let dx = -radius; dx <= radius; dx++) {
-          if (dx === 0 && dy === 0) continue;
-          if (Math.abs(dx) < 2 && Math.abs(dy) < 2) continue; // skip immediate neighbors
-          sumNeighbor += lum[(y + dy) * width + (x + dx)];
-          countNeighbor++;
+      // (b) Check if darker than neighbors in ANY direction pair
+      // Look along 4 axes: horizontal, vertical, and 2 diagonals
+      // If brighter neighbors exist on both sides of any axis, this is a line
+      let isLine = false;
+      const offsets = [
+        [[-radius, 0], [radius, 0]],   // horizontal
+        [[0, -radius], [0, radius]],    // vertical
+        [[-radius, -radius], [radius, radius]],   // diagonal
+        [[-radius, radius], [radius, -radius]],   // anti-diagonal
+      ];
+
+      for (const [[dx1, dy1], [dx2, dy2]] of offsets) {
+        const n1 = lum[(y + dy1) * width + (x + dx1)];
+        const n2 = lum[(y + dy2) * width + (x + dx2)];
+        const minNeighbor = Math.min(n1, n2);
+        if (minNeighbor - pixelLum > 25 && pixelLum < 210) {
+          isLine = true;
+          break;
         }
       }
-      const avgNeighbor = sumNeighbor / countNeighbor;
 
-      // If this pixel is significantly darker than surroundings, it's an outline
-      if (avgNeighbor - pixelLum > 35 && pixelLum < 200) {
+      if (isLine) {
         output[idx] = 0;
+      }
+    }
+  }
+  return output;
+}
+
+function dilate(
+  binary: Uint8ClampedArray,
+  width: number,
+  height: number
+): Uint8ClampedArray {
+  const output = new Uint8ClampedArray(binary.length);
+  output.fill(255);
+  for (let y = 1; y < height - 1; y++) {
+    for (let x = 1; x < width - 1; x++) {
+      if (binary[y * width + x] === 0) {
+        output[y * width + x] = 0;
+        output[(y - 1) * width + x] = 0;
+        output[(y + 1) * width + x] = 0;
+        output[y * width + (x - 1)] = 0;
+        output[y * width + (x + 1)] = 0;
       }
     }
   }
@@ -255,10 +283,13 @@ export function imageToLineart(sourceCanvas: HTMLCanvasElement): HTMLCanvasEleme
   // 2. Extract outline pixels (absolute dark + local contrast detection)
   const lines = extractOutlinePixels(noBackground, width, height);
 
-  // 3. Hollow out any large filled dark regions into outlines
-  const hollowed = hollowOutFilledRegions(lines, width, height, 3);
+  // 3. Dilate to connect broken line segments
+  const dilated = dilate(lines, width, height);
 
-  // 4. Remove small noise
+  // 4. Hollow out any large filled dark regions into outlines
+  const hollowed = hollowOutFilledRegions(dilated, width, height, 3);
+
+  // 5. Remove small noise
   const minNoiseSize = Math.max(Math.round((width * height) / 15000), 10);
   const cleaned = cleanupSmallNoise(hollowed, width, height, minNoiseSize);
 
