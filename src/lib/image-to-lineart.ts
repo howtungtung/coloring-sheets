@@ -307,6 +307,7 @@ export function imageToLineart(sourceCanvas: HTMLCanvasElement): HTMLCanvasEleme
 
   // 6. Anti-alias: 3x3 average blur + re-threshold to smooth jagged edges
   const smoothed = new Float32Array(cleaned.length);
+  smoothed.fill(255);
   for (let y = 1; y < height - 1; y++) {
     for (let x = 1; x < width - 1; x++) {
       let sum = 0;
