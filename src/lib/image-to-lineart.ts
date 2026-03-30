@@ -70,8 +70,7 @@ function removeBackground(
 function extractOutlinePixels(
   data: Uint8ClampedArray,
   width: number,
-  height: number,
-  sampleRadius: number = 4
+  height: number
 ): Uint8ClampedArray {
   // A pixel is an outline if:
   // (a) it's absolutely dark (luminance < 120), OR
@@ -87,7 +86,7 @@ function extractOutlinePixels(
   }
 
   // Use max luminance in 4 cardinal directions to detect outlines
-  const radius = sampleRadius;
+  const radius = 4;
   for (let y = radius; y < height - radius; y++) {
     for (let x = radius; x < width - radius; x++) {
       const idx = y * width + x;
@@ -131,6 +130,26 @@ function extractOutlinePixels(
   return output;
 }
 
+function dilate(
+  binary: Uint8ClampedArray,
+  width: number,
+  height: number
+): Uint8ClampedArray {
+  const output = new Uint8ClampedArray(binary.length);
+  output.fill(255);
+  for (let y = 1; y < height - 1; y++) {
+    for (let x = 1; x < width - 1; x++) {
+      if (binary[y * width + x] === 0) {
+        output[y * width + x] = 0;
+        output[(y - 1) * width + x] = 0;
+        output[(y + 1) * width + x] = 0;
+        output[y * width + (x - 1)] = 0;
+        output[y * width + (x + 1)] = 0;
+      }
+    }
+  }
+  return output;
+}
 
 function cleanupSmallNoise(
   binary: Uint8ClampedArray,
@@ -273,46 +292,35 @@ export function imageToLineart(sourceCanvas: HTMLCanvasElement): HTMLCanvasEleme
   // 1. Remove background
   const noBackground = removeBackground(imageData.data, width, height);
 
-  // 2. Upscale 2x for higher resolution line detection
-  const scale = 2;
-  const hw = width * scale;
-  const hh = height * scale;
-  const upscaled = new Uint8ClampedArray(hw * hh * 4);
-  for (let y = 0; y < hh; y++) {
-    for (let x = 0; x < hw; x++) {
-      const srcIdx = (Math.floor(y / scale) * width + Math.floor(x / scale)) * 4;
-      const dstIdx = (y * hw + x) * 4;
-      upscaled[dstIdx] = noBackground[srcIdx];
-      upscaled[dstIdx + 1] = noBackground[srcIdx + 1];
-      upscaled[dstIdx + 2] = noBackground[srcIdx + 2];
-      upscaled[dstIdx + 3] = noBackground[srcIdx + 3];
-    }
-  }
+  // 2. Extract outline pixels (absolute dark + local contrast detection)
+  const lines = extractOutlinePixels(noBackground, width, height);
 
-  // 3. Extract outline pixels at 2x resolution (scale radius proportionally)
-  const lines = extractOutlinePixels(upscaled, hw, hh, 4 * scale);
+  // 3. Dilate to connect broken line segments
+  const dilated = dilate(lines, width, height);
 
-  // 4. Hollow out large filled dark regions into outlines
-  const hollowed = hollowOutFilledRegions(lines, hw, hh, 3);
+  // 4. Hollow out any large filled dark regions into outlines
+  const hollowed = hollowOutFilledRegions(dilated, width, height, 3);
 
-  // 5. Remove small noise (thresholds scaled for 2x)
-  const minNoiseSize = Math.max(Math.round((hw * hh) / 15000), 10);
-  const cleaned = cleanupSmallNoise(hollowed, hw, hh, minNoiseSize);
+  // 5. Remove small noise
+  const minNoiseSize = Math.max(Math.round((width * height) / 15000), 10);
+  const cleaned = cleanupSmallNoise(hollowed, width, height, minNoiseSize);
 
-  // 6. Downscale back to original size — average 2x2 blocks for anti-aliasing
-  const final = new Uint8ClampedArray(width * height);
-  for (let y = 0; y < height; y++) {
-    for (let x = 0; x < width; x++) {
-      const sy = y * scale;
-      const sx = x * scale;
+  // 6. Anti-alias: 3x3 average blur + re-threshold to smooth jagged edges
+  const smoothed = new Float32Array(cleaned.length);
+  for (let y = 1; y < height - 1; y++) {
+    for (let x = 1; x < width - 1; x++) {
       let sum = 0;
-      for (let dy = 0; dy < scale; dy++) {
-        for (let dx = 0; dx < scale; dx++) {
-          sum += cleaned[(sy + dy) * hw + (sx + dx)];
+      for (let dy = -1; dy <= 1; dy++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          sum += cleaned[(y + dy) * width + (x + dx)];
         }
       }
-      final[y * width + x] = sum / (scale * scale) < 192 ? 0 : 255;
+      smoothed[y * width + x] = sum / 9;
     }
+  }
+  const final = new Uint8ClampedArray(smoothed.length);
+  for (let i = 0; i < smoothed.length; i++) {
+    final[i] = smoothed[i] < 224 ? 0 : 255;
   }
 
   // Write output
@@ -322,7 +330,7 @@ export function imageToLineart(sourceCanvas: HTMLCanvasElement): HTMLCanvasEleme
   const outCtx = outputCanvas.getContext("2d")!;
   const outData = outCtx.createImageData(width, height);
 
-  for (let i = 0; i < final.length; i++) {
+  for (let i = 0; i < cleaned.length; i++) {
     const offset = i * 4;
     outData.data[offset] = final[i];
     outData.data[offset + 1] = final[i];
