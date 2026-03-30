@@ -69,11 +69,18 @@ function extractOutlinePixels(
   const output = new Uint8ClampedArray(width * height);
   output.fill(255);
 
-  // Pre-compute luminance
+  // Pre-compute luminance and saturation
   const lum = new Float32Array(width * height);
+  const sat = new Float32Array(width * height);
   for (let i = 0; i < width * height; i++) {
     const offset = i * 4;
-    lum[i] = 0.299 * data[offset] + 0.587 * data[offset + 1] + 0.114 * data[offset + 2];
+    const r = data[offset];
+    const g = data[offset + 1];
+    const b = data[offset + 2];
+    lum[i] = 0.299 * r + 0.587 * g + 0.114 * b;
+    const max = Math.max(r, g, b);
+    const min = Math.min(r, g, b);
+    sat[i] = max === 0 ? 0 : (max - min) / max;
   }
 
   // Use max luminance in 4 cardinal directions to detect outlines
@@ -82,8 +89,12 @@ function extractOutlinePixels(
     for (let x = radius; x < width - radius; x++) {
       const idx = y * width + x;
       const pixelLum = lum[idx];
+      const pixelSat = sat[idx];
 
-      // (a) Absolutely dark
+      // Skip colored pixels — outlines are black/gray (low saturation)
+      if (pixelSat > 0.4 && pixelLum > 60) continue;
+
+      // (a) Absolutely dark and low saturation
       if (pixelLum < 120) {
         output[idx] = 0;
         continue;
@@ -211,7 +222,7 @@ function hollowOutFilledRegions(
         if (cy < height - 1) stack.push((cy + 1) * width + cx);
       }
 
-      if (region.length < 8) continue;
+      if (region.length < 20) continue;
 
       // BFS from border inward
       const regionSet = new Set(region);
