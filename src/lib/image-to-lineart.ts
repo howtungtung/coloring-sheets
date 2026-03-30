@@ -10,18 +10,27 @@ function removeBackground(
   width: number,
   height: number
 ): Uint8ClampedArray {
-  // Flood-fill from edges to mark background pixels
+  // First pass: set all transparent/semi-transparent pixels to white
   const output = new Uint8ClampedArray(data);
+  for (let i = 0; i < width * height; i++) {
+    if (data[i * 4 + 3] < 128) {
+      output[i * 4] = 255;
+      output[i * 4 + 1] = 255;
+      output[i * 4 + 2] = 255;
+      output[i * 4 + 3] = 255;
+    }
+  }
+
+  // Second pass: flood-fill from edges to mark near-white background
   const isBackground = new Uint8Array(width * height);
   const stack: number[] = [];
 
   const isBgColor = (idx: number) => {
     const offset = idx * 4;
-    const r = data[offset];
-    const g = data[offset + 1];
-    const b = data[offset + 2];
-    const a = data[offset + 3];
-    return (r > 225 && g > 225 && b > 225) || a < 128;
+    const r = output[offset];
+    const g = output[offset + 1];
+    const b = output[offset + 2];
+    return r > 225 && g > 225 && b > 225;
   };
 
   // Seed from all 4 edges
