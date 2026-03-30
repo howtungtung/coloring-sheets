@@ -90,9 +90,12 @@ function extractOutlinePixels(
       }
 
       // (b) Check if darker than neighbors in ANY direction pair
+      // Only applies to somewhat dark pixels — skip light-colored areas entirely
+      if (pixelLum >= 180) continue;
+
       // Look along 4 axes: horizontal, vertical, and 2 diagonals
       // If brighter neighbors exist on both sides of any axis, this is a line
-      let isLine = false;
+      let matchCount = 0;
       const offsets = [
         [[-radius, 0], [radius, 0]],   // horizontal
         [[0, -radius], [0, radius]],    // vertical
@@ -104,13 +107,13 @@ function extractOutlinePixels(
         const n1 = lum[(y + dy1) * width + (x + dx1)];
         const n2 = lum[(y + dy2) * width + (x + dx2)];
         const minNeighbor = Math.min(n1, n2);
-        if (minNeighbor - pixelLum > 25 && pixelLum < 210) {
-          isLine = true;
-          break;
+        if (minNeighbor - pixelLum > 30) {
+          matchCount++;
         }
       }
 
-      if (isLine) {
+      // Require at least 2 direction matches to reduce false edges
+      if (matchCount >= 2) {
         output[idx] = 0;
       }
     }
