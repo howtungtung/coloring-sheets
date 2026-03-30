@@ -211,7 +211,7 @@ function hollowOutFilledRegions(
         if (cy < height - 1) stack.push((cy + 1) * width + cx);
       }
 
-      if (region.length < 20) continue;
+      if (region.length < 8) continue;
 
       // BFS from border inward
       const regionSet = new Set(region);
