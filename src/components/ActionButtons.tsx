@@ -2,17 +2,13 @@
 
 interface ActionButtonsProps {
   lineartDataUrl: string | null;
-  onConvert: () => void;
   isConverting: boolean;
-  hasOriginal: boolean;
   fileName: string;
 }
 
 export default function ActionButtons({
   lineartDataUrl,
-  onConvert,
   isConverting,
-  hasOriginal,
   fileName,
 }: ActionButtonsProps) {
   const handleDownload = () => {
@@ -45,41 +41,28 @@ export default function ActionButtons({
     printWindow.document.body.appendChild(img);
   };
 
+  if (isConverting) {
+    return (
+      <div className="text-sm text-[#b08968]">轉換中...</div>
+    );
+  }
+
+  if (!lineartDataUrl) return null;
+
   return (
     <div className="flex flex-col sm:flex-row gap-3 justify-center items-center">
-      {hasOriginal && !lineartDataUrl && (
-        <button
-          onClick={onConvert}
-          disabled={isConverting}
-          className="px-8 py-3 rounded-full bg-[#f4a261] text-white font-bold text-base hover:bg-[#e76f51] disabled:opacity-50 transition-colors"
-        >
-          {isConverting ? "轉換中..." : "🪄 開始轉換"}
-        </button>
-      )}
-
-      {lineartDataUrl && (
-        <>
-          <button
-            onClick={handleDownload}
-            className="px-8 py-3 rounded-full bg-[#f4a261] text-white font-bold text-base hover:bg-[#e76f51] transition-colors"
-          >
-            ⬇️ 下載圖片
-          </button>
-          <button
-            onClick={handlePrint}
-            className="px-8 py-3 rounded-full bg-[#e76f51] text-white font-bold text-base hover:bg-[#d35440] transition-colors"
-          >
-            🖨️ 列印出來
-          </button>
-          <button
-            onClick={onConvert}
-            disabled={isConverting}
-            className="px-8 py-3 rounded-full border-2 border-[#f4a261] text-[#5a3e2b] font-bold text-base hover:bg-[#fff3e0] transition-colors"
-          >
-            🔄 重新轉換
-          </button>
-        </>
-      )}
+      <button
+        onClick={handleDownload}
+        className="px-8 py-3 rounded-full bg-[#f4a261] text-white font-bold text-base hover:bg-[#e76f51] transition-colors"
+      >
+        ⬇️ 下載圖片
+      </button>
+      <button
+        onClick={handlePrint}
+        className="px-8 py-3 rounded-full bg-[#e76f51] text-white font-bold text-base hover:bg-[#d35440] transition-colors"
+      >
+        🖨️ 列印出來
+      </button>
     </div>
   );
 }

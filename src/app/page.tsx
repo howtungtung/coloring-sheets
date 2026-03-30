@@ -11,14 +11,14 @@ export default function Home() {
   const [lineartDataUrl, setLineartDataUrl] = useState<string | null>(null);
   const [isConverting, setIsConverting] = useState(false);
   const [fileName, setFileName] = useState<string>("image");
-  const sourceCanvasRef = useRef<HTMLCanvasElement | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleImageLoaded = useCallback((dataUrl: string, name?: string) => {
     setOriginalSrc(dataUrl);
     setLineartDataUrl(null);
+    setIsConverting(true);
     if (name) {
-      const baseName = name.replace(/\.[^.]+$/, "");
-      setFileName(baseName);
+      setFileName(name.replace(/\.[^.]+$/, ""));
     }
 
     const img = new Image();
@@ -28,23 +28,33 @@ export default function Home() {
       canvas.height = img.naturalHeight;
       const ctx = canvas.getContext("2d")!;
       ctx.drawImage(img, 0, 0);
-      sourceCanvasRef.current = canvas;
+
+      requestAnimationFrame(() => {
+        setTimeout(() => {
+          const result = imageToLineart(canvas);
+          setLineartDataUrl(result.toDataURL("image/png"));
+          setIsConverting(false);
+        }, 50);
+      });
     };
     img.src = dataUrl;
   }, []);
 
-  const handleConvert = useCallback(() => {
-    if (!sourceCanvasRef.current) return;
-    setIsConverting(true);
+  const handleReUpload = () => {
+    fileInputRef.current?.click();
+  };
 
-    requestAnimationFrame(() => {
-      setTimeout(() => {
-        const result = imageToLineart(sourceCanvasRef.current!);
-        setLineartDataUrl(result.toDataURL("image/png"));
-        setIsConverting(false);
-      }, 50);
-    });
-  }, []);
+  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    if (!file.type.startsWith("image/")) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      handleImageLoaded(ev.target?.result as string, file.name);
+    };
+    reader.readAsDataURL(file);
+    e.target.value = "";
+  };
 
   return (
     <main className="min-h-screen bg-[#fffdf7] flex flex-col">
@@ -52,6 +62,14 @@ export default function Home() {
         <h1 className="text-3xl font-bold text-[#5a3e2b]">🖍️ 著色圖魔法屋</h1>
         <p className="text-sm text-[#7a5c45] mt-1">把照片變成好玩的著色圖！</p>
       </header>
+
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={handleFileChange}
+      />
 
       <div className="flex-1 flex flex-col items-center gap-8 p-6 md:p-10">
         {!originalSrc && <ImageUploader onImageLoaded={handleImageLoaded} />}
@@ -62,27 +80,14 @@ export default function Home() {
               originalSrc={originalSrc}
               lineartDataUrl={lineartDataUrl}
               isConverting={isConverting}
+              onClickOriginal={handleReUpload}
             />
 
             <ActionButtons
               lineartDataUrl={lineartDataUrl}
-              onConvert={handleConvert}
               isConverting={isConverting}
-              hasOriginal={true}
               fileName={fileName}
             />
-
-            <button
-              onClick={() => {
-                setOriginalSrc(null);
-                setLineartDataUrl(null);
-                setFileName("image");
-                sourceCanvasRef.current = null;
-              }}
-              className="text-sm text-[#b08968] hover:text-[#5a3e2b] underline transition-colors"
-            >
-              ← 重新選擇圖片
-            </button>
           </>
         )}
       </div>
