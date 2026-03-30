@@ -305,6 +305,24 @@ export function imageToLineart(sourceCanvas: HTMLCanvasElement): HTMLCanvasEleme
   const minNoiseSize = Math.max(Math.round((width * height) / 15000), 10);
   const cleaned = cleanupSmallNoise(hollowed, width, height, minNoiseSize);
 
+  // 6. Anti-alias: 3x3 average blur + re-threshold to smooth jagged edges
+  const smoothed = new Float32Array(cleaned.length);
+  for (let y = 1; y < height - 1; y++) {
+    for (let x = 1; x < width - 1; x++) {
+      let sum = 0;
+      for (let dy = -1; dy <= 1; dy++) {
+        for (let dx = -1; dx <= 1; dx++) {
+          sum += cleaned[(y + dy) * width + (x + dx)];
+        }
+      }
+      smoothed[y * width + x] = sum / 9;
+    }
+  }
+  const final = new Uint8ClampedArray(smoothed.length);
+  for (let i = 0; i < smoothed.length; i++) {
+    final[i] = smoothed[i] < 224 ? 0 : 255;
+  }
+
   // Write output
   const outputCanvas = document.createElement("canvas");
   outputCanvas.width = width;
@@ -314,9 +332,9 @@ export function imageToLineart(sourceCanvas: HTMLCanvasElement): HTMLCanvasEleme
 
   for (let i = 0; i < cleaned.length; i++) {
     const offset = i * 4;
-    outData.data[offset] = cleaned[i];
-    outData.data[offset + 1] = cleaned[i];
-    outData.data[offset + 2] = cleaned[i];
+    outData.data[offset] = final[i];
+    outData.data[offset + 1] = final[i];
+    outData.data[offset + 2] = final[i];
     outData.data[offset + 3] = 255;
   }
 
