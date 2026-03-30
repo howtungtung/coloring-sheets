@@ -168,7 +168,7 @@ function hollowOutFilledRegions(
   // and set interior pixels to white.
   const output = new Uint8ClampedArray(binary);
   const visited = new Uint8Array(binary.length);
-  const LINE_THICKNESS = 4; // keep borders this many pixels thick
+  const LINE_THICKNESS = 2; // keep borders this many pixels thick
 
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
@@ -352,8 +352,8 @@ export function imageToLineart(sourceCanvas: HTMLCanvasElement): HTMLCanvasEleme
   // 6. Color Dodge blend: original gray / (1 - blurred/255)
   const sketch = colorDodgeBlend(gray, blurred);
 
-  // 7. Threshold — lower value = more/thicker lines
-  const binary = threshold(sketch, 220);
+  // 7. Threshold — higher value = fewer internal edges, only strong outlines
+  const binary = threshold(sketch, 240);
 
   // 8. Dilate to make lines more solid before hollowing
   const dilated = dilate(binary, width, height);
@@ -361,8 +361,8 @@ export function imageToLineart(sourceCanvas: HTMLCanvasElement): HTMLCanvasEleme
   // 9. Hollow out filled black regions — keep only outlines
   const hollowed = hollowOutFilledRegions(dilated, width, height);
 
-  // 10. Remove small noise clusters
-  const minNoiseSize = Math.max(Math.round((width * height) / 30000), 8);
+  // 10. Remove small noise clusters — aggressive cleanup
+  const minNoiseSize = Math.max(Math.round((width * height) / 10000), 15);
   const final = cleanupSmallNoise(hollowed, width, height, minNoiseSize);
 
   // Write to output canvas
