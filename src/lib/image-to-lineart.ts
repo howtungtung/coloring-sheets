@@ -331,7 +331,7 @@ export function imageToLineart(sourceCanvas: HTMLCanvasElement): HTMLCanvasEleme
   const imageData = ctx.getImageData(0, 0, width, height);
 
   // 1. Posterize — flatten highlights and gradients into solid color blocks
-  const posterized = posterize(imageData.data, 4);
+  const posterized = posterize(imageData.data, 3);
 
   // 2. Remove background (flood-fill from edges, set near-white to pure white)
   const cleanedData = removeBackground(posterized, width, height);
