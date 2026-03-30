@@ -10,11 +10,16 @@ export default function Home() {
   const [originalSrc, setOriginalSrc] = useState<string | null>(null);
   const [lineartDataUrl, setLineartDataUrl] = useState<string | null>(null);
   const [isConverting, setIsConverting] = useState(false);
+  const [fileName, setFileName] = useState<string>("image");
   const sourceCanvasRef = useRef<HTMLCanvasElement | null>(null);
 
-  const handleImageLoaded = useCallback((dataUrl: string) => {
+  const handleImageLoaded = useCallback((dataUrl: string, name?: string) => {
     setOriginalSrc(dataUrl);
     setLineartDataUrl(null);
+    if (name) {
+      const baseName = name.replace(/\.[^.]+$/, "");
+      setFileName(baseName);
+    }
 
     const img = new Image();
     img.onload = () => {
@@ -64,12 +69,14 @@ export default function Home() {
               onConvert={handleConvert}
               isConverting={isConverting}
               hasOriginal={true}
+              fileName={fileName}
             />
 
             <button
               onClick={() => {
                 setOriginalSrc(null);
                 setLineartDataUrl(null);
+                setFileName("image");
                 sourceCanvasRef.current = null;
               }}
               className="text-sm text-[#b08968] hover:text-[#5a3e2b] underline transition-colors"

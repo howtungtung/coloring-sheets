@@ -3,7 +3,7 @@
 import { useCallback, useState, useRef } from "react";
 
 interface ImageUploaderProps {
-  onImageLoaded: (dataUrl: string) => void;
+  onImageLoaded: (dataUrl: string, fileName?: string) => void;
 }
 
 export default function ImageUploader({ onImageLoaded }: ImageUploaderProps) {
@@ -22,7 +22,7 @@ export default function ImageUploader({ onImageLoaded }: ImageUploaderProps) {
       setError("");
       const reader = new FileReader();
       reader.onload = (e) => {
-        onImageLoaded(e.target?.result as string);
+        onImageLoaded(e.target?.result as string, file.name);
       };
       reader.readAsDataURL(file);
     },
@@ -54,7 +54,8 @@ export default function ImageUploader({ onImageLoaded }: ImageUploaderProps) {
         reader.onload = () => resolve(reader.result as string);
         reader.readAsDataURL(blob);
       });
-      onImageLoaded(dataUrl);
+      const urlFileName = url.trim().split("/").pop()?.split("?")[0] || "image";
+      onImageLoaded(dataUrl, urlFileName);
     } catch {
       setError("無法載入圖片，請確認網址是否正確");
     } finally {

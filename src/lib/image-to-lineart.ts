@@ -149,7 +149,7 @@ function hollowOutFilledRegions(
   // and set interior pixels to white.
   const output = new Uint8ClampedArray(binary);
   const visited = new Uint8Array(binary.length);
-  const LINE_THICKNESS = 3; // keep borders this many pixels thick
+  const LINE_THICKNESS = 4; // keep borders this many pixels thick
 
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
@@ -282,6 +282,29 @@ function cleanupSmallNoise(
   return output;
 }
 
+function dilate(
+  binary: Uint8ClampedArray,
+  width: number,
+  height: number
+): Uint8ClampedArray {
+  // 3x3 cross dilation: spread each black pixel to its 4 direct neighbors
+  const output = new Uint8ClampedArray(binary.length);
+  output.fill(255);
+
+  for (let y = 1; y < height - 1; y++) {
+    for (let x = 1; x < width - 1; x++) {
+      if (binary[y * width + x] === 0) {
+        output[y * width + x] = 0;
+        output[(y - 1) * width + x] = 0;
+        output[(y + 1) * width + x] = 0;
+        output[y * width + (x - 1)] = 0;
+        output[y * width + (x + 1)] = 0;
+      }
+    }
+  }
+  return output;
+}
+
 export function imageToLineart(sourceCanvas: HTMLCanvasElement): HTMLCanvasElement {
   const width = sourceCanvas.width;
   const height = sourceCanvas.height;
@@ -307,15 +330,18 @@ export function imageToLineart(sourceCanvas: HTMLCanvasElement): HTMLCanvasEleme
   // 5. Color Dodge blend: original gray / (1 - blurred/255)
   const sketch = colorDodgeBlend(gray, blurred);
 
-  // 6. Threshold — tuned for uniform thin lines
-  const binary = threshold(sketch, 235);
+  // 6. Threshold — lower value = more/thicker lines
+  const binary = threshold(sketch, 220);
 
-  // 7. Hollow out filled black regions — keep only outlines
-  const hollowed = hollowOutFilledRegions(binary, width, height);
+  // 7. Dilate to make lines more solid before hollowing
+  const dilated = dilate(binary, width, height);
 
-  // 8. Remove small noise clusters
+  // 8. Hollow out filled black regions — keep only outlines
+  const hollowed = hollowOutFilledRegions(dilated, width, height);
+
+  // 9. Remove small noise clusters
   const minNoiseSize = Math.max(Math.round((width * height) / 30000), 8);
-  const cleaned = cleanupSmallNoise(hollowed, width, height, minNoiseSize);
+  const final = cleanupSmallNoise(hollowed, width, height, minNoiseSize);
 
   // Write to output canvas
   const outputCanvas = document.createElement("canvas");
@@ -324,11 +350,11 @@ export function imageToLineart(sourceCanvas: HTMLCanvasElement): HTMLCanvasEleme
   const outCtx = outputCanvas.getContext("2d")!;
   const outData = outCtx.createImageData(width, height);
 
-  for (let i = 0; i < cleaned.length; i++) {
+  for (let i = 0; i < final.length; i++) {
     const offset = i * 4;
-    outData.data[offset] = cleaned[i];
-    outData.data[offset + 1] = cleaned[i];
-    outData.data[offset + 2] = cleaned[i];
+    outData.data[offset] = final[i];
+    outData.data[offset + 1] = final[i];
+    outData.data[offset + 2] = final[i];
     outData.data[offset + 3] = 255;
   }
 

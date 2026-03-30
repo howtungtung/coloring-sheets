@@ -5,6 +5,7 @@ interface ActionButtonsProps {
   onConvert: () => void;
   isConverting: boolean;
   hasOriginal: boolean;
+  fileName: string;
 }
 
 export default function ActionButtons({
@@ -12,12 +13,13 @@ export default function ActionButtons({
   onConvert,
   isConverting,
   hasOriginal,
+  fileName,
 }: ActionButtonsProps) {
   const handleDownload = () => {
     if (!lineartDataUrl) return;
     const link = document.createElement("a");
     link.href = lineartDataUrl;
-    link.download = "coloring-page.png";
+    link.download = `${fileName}-coloring.png`;
     link.click();
   };
 
