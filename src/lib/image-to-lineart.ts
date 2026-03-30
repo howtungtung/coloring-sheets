@@ -345,15 +345,15 @@ export function imageToLineart(sourceCanvas: HTMLCanvasElement): HTMLCanvasEleme
     inverted[i] = 255 - gray[i];
   }
 
-  // 5. Heavy Gaussian blur on the inverted image
-  const blurRadius = Math.max(Math.round(Math.min(width, height) / 35), 10);
+  // 5. Very heavy Gaussian blur — large radius to ignore internal color boundaries
+  const blurRadius = Math.max(Math.round(Math.min(width, height) / 18), 16);
   const blurred = gaussianBlurSeparable(inverted, width, height, blurRadius);
 
   // 6. Color Dodge blend: original gray / (1 - blurred/255)
   const sketch = colorDodgeBlend(gray, blurred);
 
-  // 7. Threshold — higher value = fewer internal edges, only strong outlines
-  const binary = threshold(sketch, 240);
+  // 7. Threshold — high value keeps only the strongest outlines
+  const binary = threshold(sketch, 248);
 
   // 8. Dilate to make lines more solid before hollowing
   const dilated = dilate(binary, width, height);
