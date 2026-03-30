@@ -1,5 +1,7 @@
 /**
- * Converts a color image to black-and-white line art using edge detection.
+ * Converts a color image to black-and-white line art for coloring pages.
+ * Uses a pencil-sketch technique (invert + blur + color dodge blend) which
+ * produces cleaner outlines than pure edge detection, especially for cartoons.
  * Runs entirely in the browser via Canvas API.
  */
 
@@ -12,57 +14,115 @@ function grayscale(data: Uint8ClampedArray): Float32Array {
   return gray;
 }
 
-function gaussianBlur(gray: Float32Array, width: number, height: number): Float32Array {
-  const kernel = [1, 4, 6, 4, 1, 4, 16, 24, 16, 4, 6, 24, 36, 24, 6, 4, 16, 24, 16, 4, 1, 4, 6, 4, 1];
-  const kernelSize = 5;
-  const half = Math.floor(kernelSize / 2);
-  const kernelSum = 256;
-  const output = new Float32Array(gray.length);
+function gaussianBlurSeparable(
+  input: Float32Array,
+  width: number,
+  height: number,
+  radius: number
+): Float32Array {
+  // Generate 1D Gaussian kernel
+  const sigma = radius / 2;
+  const kernelSize = radius * 2 + 1;
+  const kernel = new Float32Array(kernelSize);
+  let sum = 0;
+  for (let i = 0; i < kernelSize; i++) {
+    const x = i - radius;
+    kernel[i] = Math.exp(-(x * x) / (2 * sigma * sigma));
+    sum += kernel[i];
+  }
+  for (let i = 0; i < kernelSize; i++) kernel[i] /= sum;
+
+  // Horizontal pass
+  const temp = new Float32Array(input.length);
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      let val = 0;
+      for (let k = -radius; k <= radius; k++) {
+        const px = Math.min(Math.max(x + k, 0), width - 1);
+        val += input[y * width + px] * kernel[k + radius];
+      }
+      temp[y * width + x] = val;
+    }
+  }
+
+  // Vertical pass
+  const output = new Float32Array(input.length);
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      let val = 0;
+      for (let k = -radius; k <= radius; k++) {
+        const py = Math.min(Math.max(y + k, 0), height - 1);
+        val += temp[py * width + x] * kernel[k + radius];
+      }
+      output[y * width + x] = val;
+    }
+  }
+  return output;
+}
+
+function colorDodgeBlend(base: Float32Array, blend: Float32Array): Float32Array {
+  // Color Dodge: result = base / (1 - blend/255) clamped to 255
+  // base = grayscale, blend = inverted + blurred grayscale
+  const output = new Float32Array(base.length);
+  for (let i = 0; i < base.length; i++) {
+    const b = blend[i];
+    if (b >= 255) {
+      output[i] = 255;
+    } else {
+      output[i] = Math.min((base[i] * 255) / (255 - b), 255);
+    }
+  }
+  return output;
+}
+
+function threshold(data: Float32Array, value: number): Uint8ClampedArray {
+  const output = new Uint8ClampedArray(data.length);
+  for (let i = 0; i < data.length; i++) {
+    output[i] = data[i] > value ? 255 : 0;
+  }
+  return output;
+}
+
+function cleanupSmallNoise(
+  binary: Uint8ClampedArray,
+  width: number,
+  height: number,
+  minSize: number
+): Uint8ClampedArray {
+  // Remove small isolated black pixel groups (noise) using flood fill
+  const output = new Uint8ClampedArray(binary);
+  const visited = new Uint8Array(binary.length);
 
   for (let y = 0; y < height; y++) {
     for (let x = 0; x < width; x++) {
-      let sum = 0;
-      for (let ky = -half; ky <= half; ky++) {
-        for (let kx = -half; kx <= half; kx++) {
-          const px = Math.min(Math.max(x + kx, 0), width - 1);
-          const py = Math.min(Math.max(y + ky, 0), height - 1);
-          const weight = kernel[(ky + half) * kernelSize + (kx + half)];
-          sum += gray[py * width + px] * weight;
+      const idx = y * width + x;
+      if (output[idx] === 0 && !visited[idx]) {
+        // Flood fill to find connected black region
+        const region: number[] = [];
+        const stack = [idx];
+        while (stack.length > 0) {
+          const current = stack.pop()!;
+          if (visited[current]) continue;
+          visited[current] = 1;
+          if (output[current] !== 0) continue;
+          region.push(current);
+
+          const cx = current % width;
+          const cy = (current - cx) / width;
+          if (cx > 0) stack.push(cy * width + cx - 1);
+          if (cx < width - 1) stack.push(cy * width + cx + 1);
+          if (cy > 0) stack.push((cy - 1) * width + cx);
+          if (cy < height - 1) stack.push((cy + 1) * width + cx);
+        }
+
+        // Remove if too small
+        if (region.length < minSize) {
+          for (const pixel of region) {
+            output[pixel] = 255;
+          }
         }
       }
-      output[y * width + x] = sum / kernelSum;
     }
-  }
-  return output;
-}
-
-function sobelEdgeDetection(gray: Float32Array, width: number, height: number): Float32Array {
-  const sobelX = [-1, 0, 1, -2, 0, 2, -1, 0, 1];
-  const sobelY = [-1, -2, -1, 0, 0, 0, 1, 2, 1];
-  const output = new Float32Array(gray.length);
-
-  for (let y = 1; y < height - 1; y++) {
-    for (let x = 1; x < width - 1; x++) {
-      let gx = 0;
-      let gy = 0;
-      for (let ky = -1; ky <= 1; ky++) {
-        for (let kx = -1; kx <= 1; kx++) {
-          const pixel = gray[(y + ky) * width + (x + kx)];
-          const ki = (ky + 1) * 3 + (kx + 1);
-          gx += pixel * sobelX[ki];
-          gy += pixel * sobelY[ki];
-        }
-      }
-      output[y * width + x] = Math.sqrt(gx * gx + gy * gy);
-    }
-  }
-  return output;
-}
-
-function threshold(edges: Float32Array, thresholdValue: number): Uint8ClampedArray {
-  const output = new Uint8ClampedArray(edges.length);
-  for (let i = 0; i < edges.length; i++) {
-    output[i] = edges[i] > thresholdValue ? 0 : 255;
   }
   return output;
 }
@@ -73,22 +133,42 @@ export function imageToLineart(sourceCanvas: HTMLCanvasElement): HTMLCanvasEleme
   const ctx = sourceCanvas.getContext("2d")!;
   const imageData = ctx.getImageData(0, 0, width, height);
 
+  // 1. Grayscale
   const gray = grayscale(imageData.data);
-  const blurred = gaussianBlur(gray, width, height);
-  const edges = sobelEdgeDetection(blurred, width, height);
-  const binary = threshold(edges, 30);
 
+  // 2. Invert the grayscale
+  const inverted = new Float32Array(gray.length);
+  for (let i = 0; i < gray.length; i++) {
+    inverted[i] = 255 - gray[i];
+  }
+
+  // 3. Heavy Gaussian blur on the inverted image
+  // Smaller blur = thinner lines; larger blur = thicker lines
+  const blurRadius = Math.max(Math.round(Math.min(width, height) / 60), 6);
+  const blurred = gaussianBlurSeparable(inverted, width, height, blurRadius);
+
+  // 4. Color Dodge blend: original gray / (1 - blurred/255)
+  const sketch = colorDodgeBlend(gray, blurred);
+
+  // 5. Threshold to clean binary output — higher value = less fill, cleaner coloring areas
+  const binary = threshold(sketch, 230);
+
+  // 6. Remove small noise clusters
+  const minNoiseSize = Math.max(Math.round((width * height) / 30000), 8);
+  const cleaned = cleanupSmallNoise(binary, width, height, minNoiseSize);
+
+  // Write to output canvas
   const outputCanvas = document.createElement("canvas");
   outputCanvas.width = width;
   outputCanvas.height = height;
   const outCtx = outputCanvas.getContext("2d")!;
   const outData = outCtx.createImageData(width, height);
 
-  for (let i = 0; i < binary.length; i++) {
+  for (let i = 0; i < cleaned.length; i++) {
     const offset = i * 4;
-    outData.data[offset] = binary[i];
-    outData.data[offset + 1] = binary[i];
-    outData.data[offset + 2] = binary[i];
+    outData.data[offset] = cleaned[i];
+    outData.data[offset + 1] = cleaned[i];
+    outData.data[offset + 2] = cleaned[i];
     outData.data[offset + 3] = 255;
   }
 
