@@ -139,6 +139,105 @@ function removeBackground(
   return output;
 }
 
+function hollowOutFilledRegions(
+  binary: Uint8ClampedArray,
+  width: number,
+  height: number
+): Uint8ClampedArray {
+  // Convert filled black blobs to outlines only using flood fill.
+  // For each connected black region, find border pixels (adjacent to white)
+  // and set interior pixels to white.
+  const output = new Uint8ClampedArray(binary);
+  const visited = new Uint8Array(binary.length);
+  const LINE_THICKNESS = 3; // keep borders this many pixels thick
+
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      const idx = y * width + x;
+      if (output[idx] !== 0 || visited[idx]) continue;
+
+      // Flood fill to collect entire connected black region
+      const region: number[] = [];
+      const stack = [idx];
+      while (stack.length > 0) {
+        const current = stack.pop()!;
+        if (visited[current]) continue;
+        visited[current] = 1;
+        if (output[current] !== 0) continue;
+        region.push(current);
+
+        const cx = current % width;
+        const cy = (current - cx) / width;
+        if (cx > 0) stack.push(cy * width + cx - 1);
+        if (cx < width - 1) stack.push(cy * width + cx + 1);
+        if (cy > 0) stack.push((cy - 1) * width + cx);
+        if (cy < height - 1) stack.push((cy + 1) * width + cx);
+      }
+
+      // Skip thin regions (lines) — no need to hollow
+      if (region.length < 20) continue;
+
+      // Mark border pixels: black pixels adjacent to any white pixel
+      const regionSet = new Set(region);
+      const borderDist = new Map<number, number>();
+
+      // BFS from border pixels inward to compute distance
+      const bfsQueue: number[] = [];
+      for (const pixel of region) {
+        const px = pixel % width;
+        const py = (pixel - px) / width;
+        let isBorder = false;
+        for (let dy = -1; dy <= 1 && !isBorder; dy++) {
+          for (let dx = -1; dx <= 1 && !isBorder; dx++) {
+            if (dx === 0 && dy === 0) continue;
+            const nx = px + dx;
+            const ny = py + dy;
+            if (nx < 0 || nx >= width || ny < 0 || ny >= height) {
+              isBorder = true;
+            } else if (!regionSet.has(ny * width + nx)) {
+              isBorder = true;
+            }
+          }
+        }
+        if (isBorder) {
+          borderDist.set(pixel, 0);
+          bfsQueue.push(pixel);
+        }
+      }
+
+      // BFS to find distance from border
+      let head = 0;
+      while (head < bfsQueue.length) {
+        const current = bfsQueue[head++];
+        const dist = borderDist.get(current)!;
+        const cx = current % width;
+        const cy = (current - cx) / width;
+
+        for (let dy = -1; dy <= 1; dy++) {
+          for (let dx = -1; dx <= 1; dx++) {
+            if (dx === 0 && dy === 0) continue;
+            const nIdx = (cy + dy) * width + (cx + dx);
+            if (regionSet.has(nIdx) && !borderDist.has(nIdx)) {
+              borderDist.set(nIdx, dist + 1);
+              bfsQueue.push(nIdx);
+            }
+          }
+        }
+      }
+
+      // Remove pixels deeper than LINE_THICKNESS from border
+      for (const pixel of region) {
+        const dist = borderDist.get(pixel) ?? 0;
+        if (dist >= LINE_THICKNESS) {
+          output[pixel] = 255;
+        }
+      }
+    }
+  }
+
+  return output;
+}
+
 function cleanupSmallNoise(
   binary: Uint8ClampedArray,
   width: number,
@@ -211,9 +310,12 @@ export function imageToLineart(sourceCanvas: HTMLCanvasElement): HTMLCanvasEleme
   // 6. Threshold — tuned for uniform thin lines
   const binary = threshold(sketch, 235);
 
-  // 7. Remove small noise clusters
+  // 7. Hollow out filled black regions — keep only outlines
+  const hollowed = hollowOutFilledRegions(binary, width, height);
+
+  // 8. Remove small noise clusters
   const minNoiseSize = Math.max(Math.round((width * height) / 30000), 8);
-  const cleaned = cleanupSmallNoise(binary, width, height, minNoiseSize);
+  const cleaned = cleanupSmallNoise(hollowed, width, height, minNoiseSize);
 
   // Write to output canvas
   const outputCanvas = document.createElement("canvas");
