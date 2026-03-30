@@ -65,6 +65,16 @@ export default function ImageUploader({ onImageLoaded }: ImageUploaderProps) {
 
   return (
     <div className="w-full max-w-xl mx-auto">
+      <input
+        ref={fileInputRef}
+        type="file"
+        accept="image/*"
+        className="hidden"
+        onChange={(e) => {
+          const file = e.target.files?.[0];
+          if (file) handleFile(file);
+        }}
+      />
       <div
         className={`border-3 border-dashed rounded-2xl p-8 text-center cursor-pointer transition-colors ${
           isDragging
@@ -82,17 +92,6 @@ export default function ImageUploader({ onImageLoaded }: ImageUploaderProps) {
         <div className="text-5xl mb-3">🎨</div>
         <div className="text-base font-bold text-[#5a3e2b]">把圖片拖到這裡</div>
         <div className="text-sm text-[#b08968] mt-1">或點擊選擇檔案</div>
-        <input
-          ref={fileInputRef}
-          type="file"
-          accept="image/*"
-          className="hidden"
-          onClick={(e) => e.stopPropagation()}
-          onChange={(e) => {
-            const file = e.target.files?.[0];
-            if (file) handleFile(file);
-          }}
-        />
       </div>
 
       <div className="flex items-center gap-3 mt-4">
