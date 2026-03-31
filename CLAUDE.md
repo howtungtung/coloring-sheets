@@ -35,6 +35,11 @@
 
 溫馨童趣風：暖橘漸層 (#ffecd2→#fcb69f)、奶油白底 (#fffdf7)、大圓角、膠囊按鈕。
 
+## 版本管理
+
+- 上 git tag 時，必須同步更新 `package.json` 的 `version` 欄位，確保兩者一致
+- 網頁開啟時會在 console 印出版號（來源：`package.json` version），透過 `src/components/VersionLog.tsx`
+
 ## 注意事項
 
 - 演算法參數經過多輪調校，修改前請用 refs/ 下的測試圖片驗證
