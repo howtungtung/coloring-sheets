@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useCallback, useRef } from "react";
+import { useState, useCallback } from "react";
 import ImageUploader from "@/components/ImageUploader";
 import ImagePreview from "@/components/ImagePreview";
 import ActionButtons from "@/components/ActionButtons";
@@ -11,7 +11,6 @@ export default function Home() {
   const [lineartDataUrl, setLineartDataUrl] = useState<string | null>(null);
   const [isConverting, setIsConverting] = useState(false);
   const [fileName, setFileName] = useState<string>("image");
-  const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleImageLoaded = useCallback((dataUrl: string, name?: string) => {
     setOriginalSrc(dataUrl);
@@ -40,22 +39,6 @@ export default function Home() {
     img.src = dataUrl;
   }, []);
 
-  const handleReUpload = () => {
-    fileInputRef.current?.click();
-  };
-
-  const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-    if (!file.type.startsWith("image/")) return;
-    const reader = new FileReader();
-    reader.onload = (ev) => {
-      handleImageLoaded(ev.target?.result as string, file.name);
-    };
-    reader.readAsDataURL(file);
-    e.target.value = "";
-  };
-
   return (
     <main className="min-h-screen bg-[#fffdf7] flex flex-col">
       <header className="w-full bg-gradient-to-r from-[#ffecd2] to-[#fcb69f] py-6 text-center">
@@ -64,22 +47,14 @@ export default function Home() {
       </header>
 
       <div className="flex-1 flex flex-col items-center gap-8 p-6 md:p-10">
-        {!originalSrc && <ImageUploader onImageLoaded={handleImageLoaded} />}
+        <ImageUploader onImageLoaded={handleImageLoaded} />
 
         {originalSrc && (
           <>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              className="hidden"
-              onChange={handleFileChange}
-            />
             <ImagePreview
               originalSrc={originalSrc}
               lineartDataUrl={lineartDataUrl}
               isConverting={isConverting}
-              onClickOriginal={handleReUpload}
             />
 
             <ActionButtons
