@@ -2,6 +2,8 @@
 
 將彩色圖片轉換為黑白線稿著色圖的線上工具，專為家長和老師設計。
 
+**Demo**: https://coloring-sheets-taupe.vercel.app/
+
 ## 功能
 
 - **圖片上傳**：拖曳、點擊選擇檔案、貼上圖片 URL
