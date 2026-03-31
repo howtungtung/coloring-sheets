@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { Noto_Sans_TC } from "next/font/google";
 import "./globals.css";
+import { VersionLog } from "@/components/VersionLog";
 
 const notoSansTC = Noto_Sans_TC({
   subsets: ["latin"],
@@ -20,7 +21,10 @@ export default function RootLayout({
 }) {
   return (
     <html lang="zh-TW">
-      <body className={`${notoSansTC.className} antialiased`}>{children}</body>
+      <body className={`${notoSansTC.className} antialiased`}>
+        <VersionLog />
+        {children}
+      </body>
     </html>
   );
 }
